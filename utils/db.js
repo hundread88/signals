@@ -7,16 +7,20 @@ import fs from 'fs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const file = join(__dirname, '../data/db.json');
 
-// Убедимся, что папка и файл существуют
-if (!fs.existsSync(join(__dirname, '../data'))) {
-  fs.mkdirSync(join(__dirname, '../data'), { recursive: true });
+// Убедимся, что папка существует
+const dir = join(__dirname, '../data');
+if (!fs.existsSync(dir)) {
+  fs.mkdirSync(dir, { recursive: true });
 }
+
+// Создаём пустой файл, если его нет
 if (!fs.existsSync(file)) {
   fs.writeFileSync(file, JSON.stringify({ users: [] }, null, 2));
 }
 
+// 👉 Передаём начальные данные явно:
 const adapter = new JSONFile(file);
-const db = new Low(adapter);
+const db = new Low(adapter, { users: [] });
 
 await db.read();
 db.data ||= { users: [] };

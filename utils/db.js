@@ -28,7 +28,7 @@ await db.write();
 
 export async function getUser() {
   await db.read();
-  return db.data.users;
+  return db.data?.users || [];
 }
 
 export async function saveUser(id, data) {

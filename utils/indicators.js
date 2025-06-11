@@ -1,11 +1,9 @@
 /**
  * Вычисляет значение на линии тренда для текущей свечи.
- * Линия строится по двум точкам p1(индекс, значение) и p2(индекс, значение).
  */
 function getLineValue(p1, p2, currentX) {
   if (!p1 || !p2 || p1.index === p2.index) return null;
   const slope = (p2.value - p1.value) / (p2.index - p1.index);
-  // Уравнение прямой: y = m * (x - x1) + y1
   return slope * (currentX - p1.index) + p1.value;
 }
 
@@ -14,16 +12,13 @@ function getLineValue(p1, p2, currentX) {
  */
 function findFractals(data, type) {
   const fractals = [];
-  // Для поиска фрактала нужно 2 свечи слева и 2 справа
   for (let i = 2; i < data.length - 2; i++) {
     const isHigh = type === 'high' &&
       data[i] > data[i - 1] && data[i] > data[i - 2] &&
       data[i] > data[i + 1] && data[i] > data[i + 2];
-
     const isLow = type === 'low' &&
       data[i] < data[i - 1] && data[i] < data[i - 2] &&
       data[i] < data[i + 1] && data[i] < data[i + 2];
-
     if (isHigh || isLow) {
       fractals.push({ index: i, value: data[i] });
     }
@@ -51,27 +46,37 @@ export function calculateIndicators(candles) {
     return { error: "Недостаточно данных для расчета." };
   }
 
-  // Скользящие средние
+  // --- Скользящие средние и тренд ---
   const ma7 = average(closes.slice(-7));
   const ma26 = average(closes.slice(-26));
   const trend = ma7 > ma26 ? 'up' : ma7 < ma26 ? 'down' : 'sideways';
 
-  // Фракталы
-  const frHighs = findFractals(highs, 'high');
-  const frLows = findFractals(lows, 'low');
-  
-  const lastCandleIndex = candles.length - 1;
+  // --- Фракталы ---
+  const allHighFractals = findFractals(highs, 'high');
+  const allLowFractals = findFractals(lows, 'low');
 
-  // Расчет линии сопротивления по двум последним фракталам high
+  const lastCandleIndex = candles.length - 1;
   let resistance = null;
-  if (frHighs.length >= 2) {
-    resistance = getLineValue(frHighs.at(-2), frHighs.at(-1), lastCandleIndex);
+  let support = null;
+
+  // --- Расчет линии сопротивления (строго по вашему ТЗ) ---
+  if (allHighFractals.length >= 1) {
+    const maxHighFractal = allHighFractals.reduce((max, f) => f.value > max.value ? f : max, allHighFractals[0]);
+    const fractalsAfterMax = allHighFractals.filter(f => f.index > maxHighFractal.index);
+    if (fractalsAfterMax.length > 0) {
+        const minHighFractalAfterMax = fractalsAfterMax.reduce((min, f) => f.value < min.value ? f : min, fractalsAfterMax[0]);
+        resistance = getLineValue(maxHighFractal, minHighFractalAfterMax, lastCandleIndex);
+    }
   }
 
-  // Расчет линии поддержки по двум последним фракталам low
-  let support = null;
-  if (frLows.length >= 2) {
-    support = getLineValue(frLows.at(-2), frLows.at(-1), lastCandleIndex);
+  // --- Расчет линии поддержки (строго по вашему ТЗ) ---
+  if (allLowFractals.length >= 1) {
+    const minLowFractal = allLowFractals.reduce((min, f) => f.value < min.value ? f : min, allLowFractals[0]);
+    const fractalsAfterMin = allLowFractals.filter(f => f.index > minLowFractal.index);
+     if (fractalsAfterMin.length > 0) {
+        const maxLowFractalAfterMin = fractalsAfterMin.reduce((max, f) => f.value > max.value ? f : max, fractalsAfterMin[0]);
+        support = getLineValue(minLowFractal, maxLowFractalAfterMin, lastCandleIndex);
+    }
   }
 
   return {
@@ -87,11 +92,11 @@ export function calculateIndicators(candles) {
 
 /**
  * Проверяет наличие сигналов на основе рассчитанных индикаторов.
+ * (Эта функция не изменилась, так как логика проверки пересечения корректна).
  */
 export function checkSignals(indicators, lastSignal) {
     const { ma26, support, resistance, lastCandle, prevCandle } = indicators;
     
-    // Проверяем, что все нужные данные есть
     if (!lastCandle || !prevCandle) return null;
 
     const newSignal = { type: 'none', message: '' };
@@ -104,23 +109,19 @@ export function checkSignals(indicators, lastSignal) {
         newSignal.type = 'ma_sell';
         newSignal.message = `📉 Сигнал на продажу (MA)\nЦена пересекла MA26 сверху вниз. Текущая цена: ${lastCandle.close.toFixed(4)}`;
     }
-
-    // --- Сигналы по линиям тренда ---
-    // Пробой линии сопротивления (сигнал на покупку)
+    // --- Сигналы по наклонным линиям тренда ---
     else if (resistance && prevCandle.close < resistance && lastCandle.close > resistance) {
         newSignal.type = 'trend_buy';
         newSignal.message = `📈 Сигнал на покупку (Тренд)\nЦена пробила линию сопротивления. Текущая цена: ${lastCandle.close.toFixed(4)}`;
     }
-    // Пробой линии поддержки (сигнал на продажу)
     else if (support && prevCandle.close > support && lastCandle.close < support) {
         newSignal.type = 'trend_sell';
         newSignal.message = `📉 Сигнал на продажу (Тренд)\nЦена пробила линию поддержки. Текущая цена: ${lastCandle.close.toFixed(4)}`;
     }
 
-    // Отправляем сигнал, только если он новый и отличается от предыдущего
     if (newSignal.type !== 'none' && (!lastSignal || newSignal.type !== lastSignal.type)) {
         return newSignal;
     }
 
-    return null; // Новых сигналов нет
+    return null;
 }

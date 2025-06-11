@@ -4,7 +4,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 
-// Структура данных по умолчанию
+// Структура данных по умолчанию, к которой мы будем все приводить
 const defaultData = { users: [] };
 
 // Настройка путей
@@ -16,11 +16,17 @@ if (!fs.existsSync(dataDir)) {
 const file = join(dataDir, 'db.json');
 
 const adapter = new JSONFile(file);
-
-// --- ГЛАВНОЕ ИСПРАВЛЕНИЕ ---
-// Передаем данные по умолчанию (defaultData) ВТОРЫМ АРГУМЕНТОМ.
-// Это устраняет ошибку "lowdb: missing default data" при запуске.
 const db = new Low(adapter, defaultData);
+
+/**
+ * Более надежная функция для проверки и восстановления данных
+ */
+const ensureDbData = () => {
+    // Проверяем не просто на null, а на наличие ключевого массива 'users'
+    if (!db.data || !Array.isArray(db.data.users)) {
+        db.data = defaultData;
+    }
+};
 
 /**
  * Инициализирует базу данных: читает файл и гарантирует,
@@ -28,9 +34,7 @@ const db = new Low(adapter, defaultData);
  */
 async function initializeDatabase() {
     await db.read();
-    // Эта строка является дополнительной защитой на случай, если файл db.json
-    // существует, но он пустой. В этом случае db.data может стать null.
-    db.data ||= defaultData;
+    ensureDbData(); // Используем новую надежную проверку
     await db.write();
 }
 
@@ -38,23 +42,21 @@ async function initializeDatabase() {
 await initializeDatabase();
 
 
-// --- Экспортируемые функции ---
+// --- Экспортируемые функции с новой проверкой ---
 
 export async function getUser() {
     await db.read();
-    db.data ||= defaultData;
+    ensureDbData(); // Надежная проверка
     return db.data.users;
 }
 
 export async function saveUser(id, data) {
     await db.read();
-    db.data ||= defaultData;
+    ensureDbData(); // Надежная проверка
+    
     let user = db.data.users.find(u => u.telegram_id === id);
     if (!user) {
         user = { telegram_id: id, last_signal: { type: 'none' } };
-        if (!db.data.users) {
-            db.data.users = [];
-        }
         db.data.users.push(user);
     }
     Object.assign(user, data);
@@ -63,8 +65,8 @@ export async function saveUser(id, data) {
 
 export async function updateUserSignal(id, signal) {
     await db.read();
-    db.data ||= defaultData;
-    if (!db.data.users) return;
+    ensureDbData(); // Надежная проверка
+
     const user = db.data.users.find(u => u.telegram_id === id);
     if (user) {
         user.last_signal = signal;

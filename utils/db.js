@@ -16,14 +16,20 @@ if (!fs.existsSync(dataDir)) {
 const file = join(dataDir, 'db.json');
 
 const adapter = new JSONFile(file);
-const db = new Low(adapter);
+
+// --- ГЛАВНОЕ ИСПРАВЛЕНИЕ ---
+// Передаем данные по умолчанию (defaultData) ВТОРЫМ АРГУМЕНТОМ.
+// Это устраняет ошибку "lowdb: missing default data" при запуске.
+const db = new Low(adapter, defaultData);
 
 /**
- * Инициализирует базу данных: читает файл и устанавливает
- * данные по умолчанию, если файл пуст или отсутствует.
+ * Инициализирует базу данных: читает файл и гарантирует,
+ * что данные существуют и файл записан на диск.
  */
 async function initializeDatabase() {
     await db.read();
+    // Эта строка является дополнительной защитой на случай, если файл db.json
+    // существует, но он пустой. В этом случае db.data может стать null.
     db.data ||= defaultData;
     await db.write();
 }
@@ -35,18 +41,17 @@ await initializeDatabase();
 // --- Экспортируемые функции ---
 
 export async function getUser() {
-    await db.read(); // Всегда читаем свежие данные
-    db.data ||= defaultData; // Гарантируем, что db.data не null/undefined
+    await db.read();
+    db.data ||= defaultData;
     return db.data.users;
 }
 
 export async function saveUser(id, data) {
     await db.read();
-    db.data ||= defaultData; // Гарантируем, что db.data не null/undefined
+    db.data ||= defaultData;
     let user = db.data.users.find(u => u.telegram_id === id);
     if (!user) {
         user = { telegram_id: id, last_signal: { type: 'none' } };
-        // Убедимся, что массив users существует
         if (!db.data.users) {
             db.data.users = [];
         }
@@ -58,8 +63,7 @@ export async function saveUser(id, data) {
 
 export async function updateUserSignal(id, signal) {
     await db.read();
-    db.data ||= defaultData; // Гарантируем, что db.data не null/undefined
-    // Убедимся, что массив users существует
+    db.data ||= defaultData;
     if (!db.data.users) return;
     const user = db.data.users.find(u => u.telegram_id === id);
     if (user) {

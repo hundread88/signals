@@ -4,10 +4,8 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 
-// Структура данных по умолчанию, к которой мы будем все приводить
 const defaultData = { users: [] };
 
-// Настройка путей
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dataDir = join(__dirname, '..', 'data');
 if (!fs.existsSync(dataDir)) {
@@ -19,40 +17,42 @@ const adapter = new JSONFile(file);
 const db = new Low(adapter, defaultData);
 
 /**
- * Более надежная функция для проверки и восстановления данных
+ * Максимально надежная функция для проверки и восстановления данных.
+ * Гарантирует, что db.data всегда является объектом с массивом users.
  */
 const ensureDbData = () => {
-    // Проверяем не просто на null, а на наличие ключевого массива 'users'
-    if (!db.data || !Array.isArray(db.data.users)) {
-        db.data = defaultData;
+    if (db.data === null || typeof db.data !== 'object') {
+        db.data = { users: [] }; // Если данные null или не объект, сбрасываем
+        return;
+    }
+    if (!Array.isArray(db.data.users)) {
+        db.data.users = []; // Если объект есть, но в нем нет массива users, добавляем
     }
 };
 
 /**
- * Инициализирует базу данных: читает файл и гарантирует,
- * что данные существуют и файл записан на диск.
+ * Инициализирует базу данных
  */
 async function initializeDatabase() {
     await db.read();
-    ensureDbData(); // Используем новую надежную проверку
+    ensureDbData();
     await db.write();
 }
 
-// Вызываем инициализацию при первой загрузке модуля
 await initializeDatabase();
 
 
-// --- Экспортируемые функции с новой проверкой ---
+// --- Экспортируемые функции с самой надежной проверкой ---
 
 export async function getUser() {
     await db.read();
-    ensureDbData(); // Надежная проверка
+    ensureDbData();
     return db.data.users;
 }
 
 export async function saveUser(id, data) {
     await db.read();
-    ensureDbData(); // Надежная проверка
+    ensureDbData();
     
     let user = db.data.users.find(u => u.telegram_id === id);
     if (!user) {
@@ -65,7 +65,7 @@ export async function saveUser(id, data) {
 
 export async function updateUserSignal(id, signal) {
     await db.read();
-    ensureDbData(); // Надежная проверка
+    ensureDbData();
 
     const user = db.data.users.find(u => u.telegram_id === id);
     if (user) {

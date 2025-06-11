@@ -1,34 +1,18 @@
+
 import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
+import { join } from 'path';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const file = join(__dirname, '../data/db.json');
-
-// Убедимся, что папка существует
-const dir = join(__dirname, '../data');
-if (!fs.existsSync(dir)) {
-  fs.mkdirSync(dir, { recursive: true });
-}
-
-// Создаём пустой файл, если его нет
-if (!fs.existsSync(file)) {
-  fs.writeFileSync(file, JSON.stringify({ users: [] }, null, 2));
-}
-
-// 👉 Передаём начальные данные явно:
+const file = join('data', 'db.json');
 const adapter = new JSONFile(file);
-const db = new Low(adapter, { users: [] });
+const db = new Low(adapter);
 
 await db.read();
 db.data ||= { users: [] };
-await db.write();
 
 export async function getUser() {
   await db.read();
-  return db.data?.users || [];
+  return db.data.users;
 }
 
 export async function saveUser(id, data) {

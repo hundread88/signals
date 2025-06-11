@@ -30,7 +30,6 @@ bot.hears(['5m', '15m', '30m', '1h', '4h', '1d'], async (ctx) => {
 
 setInterval(async () => {
   const users = await getUser();
-  if (Array.isArray(users)) {
   for (const user of users) {
     const { telegram_id, symbol, timeframe, last_signal } = user;
     if (!symbol || !timeframe) continue;
@@ -46,7 +45,6 @@ setInterval(async () => {
     } catch (e) {
       console.error('Ошибка при получении данных для пользователя', telegram_id, e.message);
     }
-  }
   }
 }, 60 * 1000);
 

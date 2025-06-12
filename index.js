@@ -55,7 +55,7 @@ const checkAllUsers = async () => {
                 console.error(`Ошибка расчета для ${telegram_id}:`, indicators.error);
                 continue;
             }
-            const newSignal = checkSignals(indicators, last_signal);
+            const newSignal = checkSignals(indicators, last_signal, candles);
             if (newSignal) {
                 await bot.telegram.sendMessage(telegram_id, `📢 Сигнал (${symbol}, ${timeframe}):\n${newSignal.message}`);
                 await updateUserSignal(telegram_id, newSignal);

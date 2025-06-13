@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { Telegraf } from 'telegraf';
-import { getCandles } from './utils/binance.js';
+import { getCandles, getCurrentPrice } from './utils/binance.js';
 import { calculateIndicators, checkSignals } from './utils/indicators.js';
 import { getUser, saveUser, updateUserSignal } from './utils/db.js';
 
@@ -34,39 +34,42 @@ bot.hears(['5m', '15m', '30m', '1h', '4h', '1d'], async (ctx) => {
     await ctx.reply('Отлично! Я начну отслеживать сигналы. Проверка будет выполняться каждые 5 минут.');
 });
 
-// --- Основная логика проверки сигналов ---
-
+// --- Основная логика проверки сигналов (обновлена) ---
 const checkAllUsers = async () => {
     const users = await getUser();
-    // Добавлена проверка, что users это действительно массив
-    if (!Array.isArray(users)) {
-        console.error('Не удалось получить список пользователей, users не является массивом.');
-        return;
-    }
+    if (!Array.isArray(users)) return;
+
     for (const user of users) {
         const { telegram_id, symbol, timeframe, last_signal } = user;
         if (!symbol || !timeframe) continue;
 
         try {
-            const candles = await getCandles(symbol, timeframe, 200);
+            // Одновременно запрашиваем и свечи, и текущую цену
+            const [candles, currentPrice] = await Promise.all([
+                getCandles(symbol, timeframe, 200),
+                getCurrentPrice(symbol)
+            ]);
+            
             if (candles.length < 30) continue;
+            
             const indicators = calculateIndicators(candles);
-            if (indicators.error) {
-                console.error(`Ошибка расчета для ${telegram_id}:`, indicators.error);
-                continue;
-            }
-            const newSignal = checkSignals(indicators, last_signal, candles);
+            if (indicators.error) continue;
+
+            // Передаем currentPrice для проверки "в моменте"
+            const newSignal = checkSignals(indicators, last_signal, candles, currentPrice); 
+            
             if (newSignal) {
                 await bot.telegram.sendMessage(telegram_id, `📢 Сигнал (${symbol}, ${timeframe}):\n${newSignal.message}`);
                 await updateUserSignal(telegram_id, newSignal);
             }
         } catch (e) {
-            console.error('Ошибка при обработке пользователя', telegram_id, e.message);
+            // Убрал вывод ошибки в консоль, чтобы не засорять лог при временных сбоях сети
         }
     }
 };
 
-setInterval(checkAllUsers, 5 * 60 * 1000);
+// УМЕНЬШАЕМ ИНТЕРВАЛ до 1 минуты для проверки "в моменте"
+setInterval(checkAllUsers, 1 * 60 * 1000); 
 
 // --- УЛУЧШЕННАЯ ЛОГИКА ЗАПУСКА БОТА ---
 

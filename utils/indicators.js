@@ -72,7 +72,7 @@ export function checkSignals(indicators, lastSignal, candles, currentPrice) {
     let newSignal = null;
 
     // --- ИЗМЕНЕНИЕ 2: РЕЖИМ ОТЛАДКИ ---
-    const DEBUG_MODE = true; // Установите false, чтобы отключить подробные логи
+    const DEBUG_MODE = false; // Установите false, чтобы отключить подробные логи
     if (DEBUG_MODE) {
         const index = candles.length - 3; // Индекс свечи, которая могла стать подтвержденным фракталом
         const highSlice = candles.slice(index - 2, index + 3).map(c => parseFloat(c[2]));

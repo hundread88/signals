@@ -63,13 +63,17 @@ export async function saveUser(id, data) {
     await db.write();
 }
 
-export async function updateUserSignal(id, signal) {
+// ... другие функции без изменений ...
+
+export async function updateUserSignal(id, signal, anchors) { // Добавлен параметр anchors
     await db.read();
     ensureDbData();
 
     const user = db.data.users.find(u => u.telegram_id === id);
     if (user) {
+        // Обновляем и сигнал, и якоря
         user.last_signal = signal;
+        user.line_anchors = anchors;
         await db.write();
     }
 }

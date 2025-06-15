@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import express from 'express'; // Импортируем express
+import express from 'express';
 import { Telegraf } from 'telegraf';
 import { getCandles, getCurrentPrice } from './utils/binance.js'; 
 import { calculateIndicators, checkSignals } from './utils/indicators.js';
@@ -12,16 +12,13 @@ if (!process.env.BOT_TOKEN) {
 }
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const app = express(); // Создаем приложение express
+const app = express();
 const port = process.env.PORT || 8080;
 
-// --- Роут для UptimeRobot ---
-// Этот URL будет всегда отвечать "OK", чтобы UptimeRobot был доволен
 app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });
 
-// ... (код обработчиков bot.start, bot.hears без изменений) ...
 bot.start(async (ctx) => {
     await ctx.reply('Добро пожаловать! Я бот для крипто-сигналов. Выбери криптовалюту:', {
         reply_markup: { keyboard: [['BTCUSDT', 'ETHUSDT', 'SOLUSDT']], one_time_keyboard: true, resize_keyboard: true }
@@ -37,60 +34,57 @@ bot.hears(['BTCUSDT', 'ETHUSDT', 'SOLUSDT'], async (ctx) => {
 bot.hears(['5m', '15m', '30m', '1h', '4h', '1d'], async (ctx) => {
     const id = ctx.from.id;
     await saveUser(id, { timeframe: ctx.message.text });
-    await ctx.reply('Отлично! Я начну отслеживать сигналы. Проверка будет выполняться каждую минуту для получения сигналов "в моменте".');
+    await ctx.reply('Отлично! Я начну отслеживать сигналы. Проверка будет выполняться каждую минуту.');
 });
 
-// --- Основная логика проверки сигналов (без изменений) ---
-// ... внутри функции checkAllUsers ...
-for (const user of users) {
-    const { telegram_id, symbol, timeframe, last_signal, line_anchors } = user; // Достаем line_anchors
-    if (!symbol || !timeframe) continue;
 
-    try {
-        const [candles, currentPrice] = await Promise.all([
-            getCandles(symbol, timeframe, 200),
-            getCurrentPrice(symbol)
-        ]);
-        
-        if (candles.length < 30) continue;
-        
-        // Передаем line_anchors в функцию
-        const { indicators, new_anchors } = calculateIndicators(candles, line_anchors); 
-        
-        if (indicators.error) continue;
+const checkAllUsers = async () => {
+    // ВОТ ЭТА СТРОКА БЫЛА ПРОПУЩЕНА
+    const users = await getUser(); 
+    if (!Array.isArray(users)) return;
 
-        const newSignal = checkSignals(indicators, last_signal, candles, currentPrice); 
-        
-        if (newSignal) {
-            await bot.telegram.sendMessage(telegram_id, `📢 Сигнал (${symbol}, ${timeframe}):\n${newSignal.message}`);
-            // Обновляем и сигнал, и якоря
-            await updateUserSignal(telegram_id, newSignal, new_anchors); 
-        } else {
-            // Если сигнала не было, все равно обновляем якоря
-            await updateUserSignal(telegram_id, last_signal, new_anchors);
+    for (const user of users) {
+        const { telegram_id, symbol, timeframe, last_signal, line_anchors } = user;
+        if (!symbol || !timeframe) continue;
+
+        try {
+            const [candles, currentPrice] = await Promise.all([
+                getCandles(symbol, timeframe, 200),
+                getCurrentPrice(symbol)
+            ]);
+            
+            if (candles.length < 30) continue;
+            
+            const { indicators, new_anchors } = calculateIndicators(candles, line_anchors); 
+            
+            if (indicators.error) continue;
+
+            const newSignal = checkSignals(indicators, last_signal, candles, currentPrice); 
+            
+            if (newSignal) {
+                await bot.telegram.sendMessage(telegram_id, `📢 Сигнал (${symbol}, ${timeframe}):\n${newSignal.message}`);
+                await updateUserSignal(telegram_id, newSignal, new_anchors); 
+            } else {
+                await updateUserSignal(telegram_id, last_signal, new_anchors);
+            }
+        } catch (e) {
+            console.error(`Ошибка при обработке ${symbol}: ${e.message}`);
         }
-    } catch (e) {
-        console.error(`Ошибка при обработке ${symbol}: ${e.message}`);
     }
-}
+};
 
-// Запускаем цикл проверки
 setInterval(checkAllUsers, 1 * 60 * 1000); 
 
-// --- Логика запуска бота через Express ---
 const startBot = async () => {
     process.once('SIGINT', () => bot.stop('SIGINT'));
     process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
     if (process.env.WEBHOOK_URL) {
-        // Устанавливаем вебхук для Telegraf
         app.use(await bot.createWebhook({ domain: process.env.WEBHOOK_URL }));
-
         app.listen(port, () => {
             console.log(`Бот запущен в режиме webhook на порту ${port}`);
         });
     } else {
-        // Локальный запуск
         await bot.launch();
         console.log('Бот запущен в режиме polling');
     }

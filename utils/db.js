@@ -16,23 +16,12 @@ const file = join(dataDir, 'db.json');
 const adapter = new JSONFile(file);
 const db = new Low(adapter, defaultData);
 
-/**
- * Максимально надежная функция для проверки и восстановления данных.
- * Гарантирует, что db.data всегда является объектом с массивом users.
- */
 const ensureDbData = () => {
-    if (db.data === null || typeof db.data !== 'object') {
-        db.data = { users: [] }; // Если данные null или не объект, сбрасываем
-        return;
-    }
-    if (!Array.isArray(db.data.users)) {
-        db.data.users = []; // Если объект есть, но в нем нет массива users, добавляем
+    if (!db.data || !Array.isArray(db.data.users)) {
+        db.data = defaultData;
     }
 };
 
-/**
- * Инициализирует базу данных
- */
 async function initializeDatabase() {
     await db.read();
     ensureDbData();
@@ -40,9 +29,6 @@ async function initializeDatabase() {
 }
 
 await initializeDatabase();
-
-
-// --- Экспортируемые функции с самой надежной проверкой ---
 
 export async function getUser() {
     await db.read();
@@ -63,15 +49,12 @@ export async function saveUser(id, data) {
     await db.write();
 }
 
-// ... другие функции без изменений ...
-
-export async function updateUserSignal(id, signal, anchors) { // Добавлен параметр anchors
+export async function updateUserSignal(id, signal, anchors) {
     await db.read();
     ensureDbData();
 
     const user = db.data.users.find(u => u.telegram_id === id);
     if (user) {
-        // Обновляем и сигнал, и якоря
         user.last_signal = signal;
         user.line_anchors = anchors;
         await db.write();

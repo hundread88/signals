@@ -41,36 +41,38 @@ bot.hears(['5m', '15m', '30m', '1h', '4h', '1d'], async (ctx) => {
 });
 
 // --- Основная логика проверки сигналов (без изменений) ---
-const checkAllUsers = async () => {
-    const users = await getUser();
-    if (!Array.isArray(users)) return;
+// ... внутри функции checkAllUsers ...
+for (const user of users) {
+    const { telegram_id, symbol, timeframe, last_signal, line_anchors } = user; // Достаем line_anchors
+    if (!symbol || !timeframe) continue;
 
-    for (const user of users) {
-        const { telegram_id, symbol, timeframe, last_signal } = user;
-        if (!symbol || !timeframe) continue;
+    try {
+        const [candles, currentPrice] = await Promise.all([
+            getCandles(symbol, timeframe, 200),
+            getCurrentPrice(symbol)
+        ]);
+        
+        if (candles.length < 30) continue;
+        
+        // Передаем line_anchors в функцию
+        const { indicators, new_anchors } = calculateIndicators(candles, line_anchors); 
+        
+        if (indicators.error) continue;
 
-        try {
-            const [candles, currentPrice] = await Promise.all([
-                getCandles(symbol, timeframe, 200),
-                getCurrentPrice(symbol)
-            ]);
-            
-            if (candles.length < 30) continue;
-            
-            const indicators = calculateIndicators(candles);
-            if (indicators.error) continue;
-
-            const newSignal = checkSignals(indicators, last_signal, candles, currentPrice); 
-            
-            if (newSignal) {
-                await bot.telegram.sendMessage(telegram_id, `📢 Сигнал (${symbol}, ${timeframe}):\n${newSignal.message}`);
-                await updateUserSignal(telegram_id, newSignal);
-            }
-        } catch (e) {
-            console.error(`Ошибка при обработке ${symbol}: ${e.message}`);
+        const newSignal = checkSignals(indicators, last_signal, candles, currentPrice); 
+        
+        if (newSignal) {
+            await bot.telegram.sendMessage(telegram_id, `📢 Сигнал (${symbol}, ${timeframe}):\n${newSignal.message}`);
+            // Обновляем и сигнал, и якоря
+            await updateUserSignal(telegram_id, newSignal, new_anchors); 
+        } else {
+            // Если сигнала не было, все равно обновляем якоря
+            await updateUserSignal(telegram_id, last_signal, new_anchors);
         }
+    } catch (e) {
+        console.error(`Ошибка при обработке ${symbol}: ${e.message}`);
     }
-};
+}
 
 // Запускаем цикл проверки
 setInterval(checkAllUsers, 1 * 60 * 1000); 

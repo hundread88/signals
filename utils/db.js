@@ -36,27 +36,33 @@ export async function getUser() {
     return db.data.users;
 }
 
+// ... функции ensureDbData, initializeDatabase, getUser ...
+
 export async function saveUser(id, data) {
     await db.read();
     ensureDbData();
     
     let user = db.data.users.find(u => u.telegram_id === id);
     if (!user) {
-        user = { telegram_id: id, last_signal: { type: 'none' } };
+        // Инициализируем пользователя с пустым кэшем сигналов
+        user = { 
+            telegram_id: id, 
+            signal_cache: { period_timestamp: 0, sent_types: [] } 
+        };
         db.data.users.push(user);
     }
     Object.assign(user, data);
     await db.write();
 }
 
-export async function updateUserSignal(id, signal, anchors) {
+// updateUserSignal теперь будет обновлять кэш
+export async function updateUserSignal(id, new_cache) {
     await db.read();
     ensureDbData();
 
     const user = db.data.users.find(u => u.telegram_id === id);
     if (user) {
-        user.last_signal = signal;
-        user.line_anchors = anchors;
+        user.signal_cache = new_cache;
         await db.write();
     }
 }

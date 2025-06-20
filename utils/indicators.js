@@ -1,3 +1,5 @@
+// Вспомогательные функции и calculateIndicators без изменений
+
 function getLineValue(p1, p2, currentX) {
   if (!p1 || !p2 || p1.index === p2.index) return null;
   const slope = (p2.value - p1.value) / (p2.index - p1.index);
@@ -18,7 +20,6 @@ function average(arr) {
   if (arr.length === 0) return 0;
   return arr.reduce((sum, val) => sum + val, 0) / arr.length;
 }
-
 export function calculateIndicators(candles) {
   const closes = candles.map(c => parseFloat(c[4]));
   if (closes.length < 30) { return { indicators: { error: "Недостаточно данных." } }; }
@@ -28,7 +29,11 @@ export function calculateIndicators(candles) {
   const allHighFractals = findFractals(highs, 'high');
   const allLowFractals = findFractals(lows, 'low');
   let support = null, resistance = null;
-  const currentCandleIndex = candles.length - 1;
+  
+  // ВАЖНО: Мы вычисляем линию для КОНКРЕТНОГО МОМЕНТА ВРЕМЕНИ, для `currentPrice`
+  // Поэтому индекс для проекции будет `candles.length`, а не `length - 1`
+  const currentCandleIndex = candles.length;
+
   if (allHighFractals.length >= 2) {
     resistance = getLineValue(allHighFractals.at(-2), allHighFractals.at(-1), currentCandleIndex);
   }
@@ -43,8 +48,11 @@ export function calculateIndicators(candles) {
   return { indicators };
 }
 
+/**
+ * Главная функция проверки сигналов (ФИНАЛЬНАЯ ВЕРСИЯ)
+ */
 export function checkSignals(indicators, signal_cache, candles, currentPrice) {
-    const { ma26, support, resistance, allHighFractals, allLowFractals, prevCandle } = indicators;
+    const { ma26, allHighFractals, allLowFractals, prevCandle } = indicators;
     if (!prevCandle || !currentPrice || candles.length < 5) {
         return { newSignals: [], updatedCache: signal_cache };
     }
@@ -58,43 +66,63 @@ export function checkSignals(indicators, signal_cache, candles, currentPrice) {
     const potentialSignals = [];
     const newlyConfirmedFractalIndex = candles.length - 3;
 
+    // --- БЛОК 1: Информационные сигналы о фракталах (проверяются всегда) ---
     const newHighFractal = allHighFractals.find(f => f.index === newlyConfirmedFractalIndex);
     if (newHighFractal) {
         const prevHighFractal = allHighFractals.filter(f => f.index < newHighFractal.index).at(-1);
         if (!prevHighFractal || newHighFractal.value > prevHighFractal.value) {
-            potentialSignals.push({ type: 'info_peak_high', message: `📈 Сформирован новый пиковый фрактал сверху (${newHighFractal.value.toFixed(4)}).`, index: newHighFractal.index });
+            potentialSignals.push({ type: 'info_peak_high', message: `📈 Сформирован новый пиковый фрактал сверху (${newHighFractal.value.toFixed(4)}).` });
         } else {
-            potentialSignals.push({ type: 'info_line_high', message: `🔴 Сформирован новый фрактал сверху, построена наклонная (${newHighFractal.value.toFixed(4)}).`, index: newHighFractal.index });
+            potentialSignals.push({ type: 'info_line_high', message: `🔴 Сформирован новый фрактал сверху, построена наклонная (${newHighFractal.value.toFixed(4)}).` });
         }
     }
     const newLowFractal = allLowFractals.find(f => f.index === newlyConfirmedFractalIndex);
     if (newLowFractal) {
         const prevLowFractal = allLowFractals.filter(f => f.index < newLowFractal.index).at(-1);
         if (!prevLowFractal || newLowFractal.value < prevLowFractal.value) {
-            potentialSignals.push({ type: 'info_peak_low', message: `📉 Сформирован новый пиковый фрактал снизу (${newLowFractal.value.toFixed(4)}).`, index: newLowFractal.index});
+            potentialSignals.push({ type: 'info_peak_low', message: `📉 Сформирован новый пиковый фрактал снизу (${newLowFractal.value.toFixed(4)}).` });
         } else {
-            potentialSignals.push({ type: 'info_line_low', message: `🟢 Сформирован новый фрактал снизу, построена наклонная (${newLowFractal.value.toFixed(4)}).`, index: newLowFractal.index});
+            potentialSignals.push({ type: 'info_line_low', message: `🟢 Сформирован новый фрактал снизу, построена наклонная (${newLowFractal.value.toFixed(4)}).` });
         }
     }
 
+    // --- БЛОК 2: Торговые сигналы по MA26 (проверяются всегда) ---
     if (prevCandle.close < ma26 && currentPrice > ma26) {
         potentialSignals.push({ type: 'ma_buy', message: `📈 MA Покупка: Цена (${currentPrice.toFixed(4)}) пересекла MA26.` });
     } else if (prevCandle.close > ma26 && currentPrice < ma26) {
         potentialSignals.push({ type: 'ma_sell', message: `📉 MA Продажа: Цена (${currentPrice.toFixed(4)}) пересекла MA26.` });
     }
     
-    const lastHigh = allHighFractals.at(-1);
-    const prevHigh = allHighFractals.at(-2);
-    if (resistance && prevHigh && lastHigh && prevHigh.value > lastHigh.value && prevCandle.close < resistance && currentPrice > resistance) {
-        potentialSignals.push({ type: 'trend_buy', message: `📈 Тренд Покупка: Цена (${currentPrice.toFixed(4)}) пробила нисходящее сопротивление.` });
+    // --- БЛОК 3: Торговые сигналы по наклонным (проверяются всегда) ---
+    // Для сопротивления
+    if (allHighFractals.length >= 2) {
+        const lastHigh = allHighFractals.at(-1);
+        const prevHigh = allHighFractals.at(-2);
+        // Проверяем, что линия была нисходящей
+        if (prevHigh.value > lastHigh.value) {
+            const resistanceLineValue = getLineValue(prevHigh, lastHigh, candles.length); // Проекция на текущий момент
+            const prevResistanceLineValue = getLineValue(prevHigh, lastHigh, candles.length - 1); // Проекция на прошлую свечу
+            if (prevCandle.close < prevResistanceLineValue && currentPrice > resistanceLineValue) {
+                potentialSignals.push({ type: 'trend_buy', message: `📈 Тренд Покупка: Цена (${currentPrice.toFixed(4)}) пробила нисходящее сопротивление.` });
+            }
+        }
     }
     
-    const lastLow = allLowFractals.at(-1);
-    const prevLow = allLowFractals.at(-2);
-    if (support && prevLow && lastLow && prevLow.value < lastLow.value && prevCandle.close > support && currentPrice < support) {
-        potentialSignals.push({ type: 'trend_sell', message: `📉 Тренд Продажа: Цена (${currentPrice.toFixed(4)}) пробила восходящую поддержку.` });
+    // Для поддержки
+    if (allLowFractals.length >= 2) {
+        const lastLow = allLowFractals.at(-1);
+        const prevLow = allLowFractals.at(-2);
+        // Проверяем, что линия была восходящей
+        if (prevLow.value < lastLow.value) {
+            const supportLineValue = getLineValue(prevLow, lastLow, candles.length);
+            const prevSupportLineValue = getLineValue(prevLow, lastLow, candles.length - 1);
+            if (prevCandle.close > prevSupportLineValue && currentPrice < supportLineValue) {
+                potentialSignals.push({ type: 'trend_sell', message: `📉 Тренд Продажа: Цена (${currentPrice.toFixed(4)}) пробила восходящую поддержку.` });
+            }
+        }
     }
 
+    // --- Финальная обработка и фильтрация ---
     const newSignalsToSend = [];
     for (const signal of potentialSignals) {
         if (!currentCache.sent_types.includes(signal.type)) {

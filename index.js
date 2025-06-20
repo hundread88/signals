@@ -37,15 +37,11 @@ bot.hears(['5m', '15m', '30m', '1h', '4h', '1d'], async (ctx) => {
     await ctx.reply('Отлично! Я начну отслеживать сигналы. Проверка будет выполняться каждую минуту.');
 });
 
-
-// ... импорты и код бота ...
-
 const checkAllUsers = async () => {
     const users = await getUser();
     if (!Array.isArray(users)) return;
 
     for (const user of users) {
-        // Достаем signal_cache вместо last_signal
         const { telegram_id, symbol, timeframe, signal_cache } = user;
         if (!symbol || !timeframe) continue;
 
@@ -60,22 +56,21 @@ const checkAllUsers = async () => {
             const { indicators } = calculateIndicators(candles); 
             if (indicators.error) continue;
 
-            // Передаем старый кэш и получаем новый
-            const { newSignal, updatedCache } = checkSignals(indicators, signal_cache, candles, currentPrice); 
+            const { newSignals, updatedCache } = checkSignals(indicators, signal_cache, candles, currentPrice); 
             
-            // Всегда обновляем кэш в БД, даже если нового сигнала не было
             await updateUserSignal(telegram_id, updatedCache); 
 
-            if (newSignal) {
-                await bot.telegram.sendMessage(telegram_id, `📢 Сигнал (${symbol}, ${timeframe}):\n${newSignal.message}`);
+            if (newSignals && newSignals.length > 0) {
+                for (const signal of newSignals) {
+                    await bot.telegram.sendMessage(telegram_id, `📢 Сигнал (${symbol}, ${timeframe}):\n${signal.message}`);
+                    await new Promise(resolve => setTimeout(resolve, 200)); 
+                }
             }
         } catch (e) {
             console.error(`Ошибка при обработке ${symbol}: ${e.message}`);
         }
     }
 };
-
-// ... остальной код ...
 
 setInterval(checkAllUsers, 1 * 60 * 1000); 
 

@@ -36,15 +36,12 @@ export async function getUser() {
     return db.data.users;
 }
 
-// ... функции ensureDbData, initializeDatabase, getUser ...
-
 export async function saveUser(id, data) {
     await db.read();
     ensureDbData();
     
     let user = db.data.users.find(u => u.telegram_id === id);
     if (!user) {
-        // Инициализируем пользователя с пустым кэшем сигналов
         user = { 
             telegram_id: id, 
             signal_cache: { period_timestamp: 0, sent_types: [] } 
@@ -55,7 +52,6 @@ export async function saveUser(id, data) {
     await db.write();
 }
 
-// updateUserSignal теперь будет обновлять кэш
 export async function updateUserSignal(id, new_cache) {
     await db.read();
     ensureDbData();

@@ -21,10 +21,10 @@ app.get('/health', (req, res) => {
 
 bot.start(async (ctx) => {
     await ctx.reply('Добро пожаловать! Я бот для крипто-сигналов. Выбери криптовалюту:', {
-        reply_markup: { keyboard: [['BTCUSDT', 'ETHUSDT', 'SOLUSDT']], one_time_keyboard: true, resize_keyboard: true }
+        reply_markup: { keyboard: [['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'JUPUSDT']], one_time_keyboard: true, resize_keyboard: true }
     });
 });
-bot.hears(['BTCUSDT', 'ETHUSDT', 'SOLUSDT'], async (ctx) => {
+bot.hears(['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'JUPUSDT'], async (ctx) => {
     const id = ctx.from.id;
     await saveUser(id, { symbol: ctx.message.text });
     await ctx.reply('Выбери таймфрейм:', {
